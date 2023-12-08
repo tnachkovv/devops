@@ -1,0 +1,9 @@
+Allocated Elastic IP address: 3.23.168.225
+Associated Elastic IP address 3.23.168.225 with instance i-049b10ae897219eb0
+Allocated Elastic IP address: 3.133.180.60
+Associated Elastic IP address 3.133.180.60 with instance i-05472df21c5565472
+Failed to trigger deployment.
+Traceback (most recent call last):
+  File "D:\DevOps\dynamo-task-windows\devops-task.py", line 209, in <module>
+    install_dotnet(worker_instance_id, ec2_instance_username, private_key_path)
+NameError: name 'ec2_instance_username' is not defined

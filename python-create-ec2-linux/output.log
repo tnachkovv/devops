@@ -1,0 +1,8 @@
+Allocated Elastic IP address: 18.118.90.210
+Associated Elastic IP address 18.118.90.210 with instance i-0e59e5bd34a6c8c49
+Traceback (most recent call last):
+  File "D:\DevOps\dynamo-task\devops-task.py", line 162, in <module>
+    ssh_client.connect(ec2_instance_ip, username=ec2_instance_username, key_filename=ssh_key_path)
+  File "D:\Python\python software\lib\site-packages\paramiko\client.py", line 409, in connect
+    raise NoValidConnectionsError(errors)
+paramiko.ssh_exception.NoValidConnectionsError: [Errno None] Unable to connect to port 22 on 18.118.90.210
