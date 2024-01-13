@@ -28,16 +28,16 @@ variable "settings" {
       skip_final_snapshot = true
     },
     "web_app" = {
-      count         = 1
+      count         = 2
       instance_type = "t2.micro"
     },
     "app_app" = {
-      count         = 1
+      count         = 2
       instance_type = "t2.micro"
     },
      "bastion" = {
       count         = 1
-      instance_type = "t2.small"
+      instance_type = "t2.micro"
     }
   }
 }
@@ -51,8 +51,8 @@ variable "public_subnet_cidr_blocks" {
   ]
 }
 
-variable "private_subnet_web_cidr_blocks" {
-  description = "Available CIDR blocks for private subnets for web layer"
+variable "private_subnet_cidr_blocks" {
+  description = "Available CIDR blocks for private subnets"
   type        = list(string)
   default = [
     "10.0.101.0/24",
@@ -60,32 +60,16 @@ variable "private_subnet_web_cidr_blocks" {
   ]
 }
 
-variable "private_subnet_app_cidr_blocks" {
-  description = "Available CIDR blocks for private subnets for app layer"
-  type        = list(string)
-  default = [
-    "10.0.103.0/24",
-    "10.0.104.0/24",
-  ]
-}
-
-variable "private_subnet_db_cidr_blocks" {
-  description = "Available CIDR blocks for private subnets for db layer"
-  type        = list(string)
-  default = [
-    "10.0.105.0/24",
-    "10.0.106.0/24",
-  ]
-}
-
 variable "db_username" {
   description = "Database master user"
   type        = string
   sensitive   = true
+  default = "postgres"
 }
 
 variable "db_password" {
   description = "Database master user password"
   type        = string
   sensitive   = true
+  default     = "Employeeportal123"
 }

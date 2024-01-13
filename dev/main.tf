@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
+      source  = "registry.terraform.io/hashicorp/aws"
       version = "4.0.0"
     }
   }
@@ -15,78 +15,128 @@ data "aws_availability_zones" "available" {
   state = "available"
 }
 
-data "aws_ami" "ubuntu" {
+data "aws_ami" "rhel_9-3" {
   most_recent = "true"
+//  id = "ami-023c11a32b0207432"
 
   filter {
     name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
+    values = ["RHEL-9.3.0_HVM-20231101-x86_64-5-Hourly2-GP2"]
   }
-  owners = ["146379056159"]
+  owners = ["309956199498"]
 }
 
-resource "aws_vpc" "test-vpc" {
+resource "aws_vpc" "ep_vpc" {
   cidr_block           = var.vpc_cidr_block
   enable_dns_hostnames = true
   tags = {
-    Name = "test-vpc"
+    Name = "ep_vpc"
   }
 }
 
-resource "aws_internet_gateway" "test_igw" {
-  vpc_id = aws_vpc.test-vpc.id
+resource "aws_internet_gateway" "ep_igw" {
+  vpc_id = aws_vpc.ep_vpc.id
   tags = {
-    Name = "test_igw"
+    Name = "ep_igw"
   }
 }
 
-resource "aws_subnet" "test_public_subnet" {
+resource "aws_subnet" "ep_public_subnet" {
   count             = var.subnet_count.public
-  vpc_id            = aws_vpc.test-vpc.id
+  vpc_id            = aws_vpc.ep_vpc.id
   cidr_block        = var.public_subnet_cidr_blocks[count.index]
   availability_zone = data.aws_availability_zones.available.names[count.index]
   tags = {
-    Name = "test_public_subnet_${count.index}"
+    Name = "ep_public_subnet_${count.index}"
   }
 }
 
-resource "aws_subnet" "test_private_subnet" {
+resource "aws_subnet" "ep_private_web_subnet" {
   count             = var.subnet_count.private
-  vpc_id            = aws_vpc.test-vpc.id
-  cidr_block        = var.private_subnet_cidr_blocks[count.index]
+  vpc_id            = aws_vpc.ep_vpc.id
+  cidr_block        = var.private_subnet_web_cidr_blocks[count.index]
   availability_zone = data.aws_availability_zones.available.names[count.index]
   tags = {
-    Name = "test_private_subnet_${count.index}"
+    Name = "ep_private_web_subnet_${count.index}"
   }
 }
-resource "aws_route_table" "test_public_rt" {
-  vpc_id = aws_vpc.test-vpc.id
+
+
+resource "aws_subnet" "ep_private_app_subnet" {
+  count             = var.subnet_count.private
+  vpc_id            = aws_vpc.ep_vpc.id
+  cidr_block        = var.private_subnet_app_cidr_blocks[count.index]
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  tags = {
+    Name = "ep_private_app_subnet_${count.index}"
+  }
+}
+
+resource "aws_subnet" "ep_private_db_subnet" {
+  count             = var.subnet_count.private
+  vpc_id            = aws_vpc.ep_vpc.id
+  cidr_block        = var.private_subnet_db_cidr_blocks[count.index]
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  tags = {
+    Name = "ep_private_db_subnet_${count.index}"
+  }
+}
+
+resource "aws_route_table" "ep_public_rt" {
+  vpc_id = aws_vpc.ep_vpc.id
   route {
     cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.test_igw.id
+    gateway_id = aws_internet_gateway.ep_igw.id
   }
 }
 
 resource "aws_route_table_association" "public" {
   count          = var.subnet_count.public
-  route_table_id = aws_route_table.test_public_rt.id
-  subnet_id      = 	aws_subnet.test_public_subnet[count.index].id
+  route_table_id = aws_route_table.ep_public_rt.id
+  subnet_id      = 	aws_subnet.ep_public_subnet[count.index].id
 }
 
-resource "aws_route_table" "test_private_rt" {
-  vpc_id = aws_vpc.test-vpc.id
+resource "aws_route_table" "ep_private_rt" {
+  vpc_id = aws_vpc.ep_vpc.id
 }
 
-resource "aws_route_table_association" "private" {
+resource "aws_route_table" "ep_private_rt_db" {
+  vpc_id = aws_vpc.ep_vpc.id
+}
+
+
+resource "aws_route_table_association" "private_web" {
   count          = var.subnet_count.private
-  route_table_id = aws_route_table.test_private_rt.id
-  subnet_id      = aws_subnet.test_private_subnet[count.index].id
+  route_table_id = aws_route_table.ep_private_rt.id
+  subnet_id      = aws_subnet.ep_private_web_subnet[count.index].id
 }
 
-resource "aws_security_group" "test_web_sg" {
-  name        = "test_web_sg"
-  description = "Security group for test web servers"
-  vpc_id      = aws_vpc.test-vpc.id
+
+resource "aws_route_table_association" "private_app" {
+  count          = var.subnet_count.private
+  route_table_id = aws_route_table.ep_private_rt.id
+  subnet_id      = aws_subnet.ep_private_app_subnet[count.index].id
+}
+
+resource "aws_route_table_association" "private_db" {
+  count          = var.subnet_count.private
+  route_table_id = aws_route_table.ep_private_rt_db.id
+  subnet_id      = aws_subnet.ep_private_db_subnet[count.index].id
+}
+
+resource "aws_security_group" "ep_web_sg" {
+  name        = "ep_web_sg"
+  description = "Security group for web server (presentation layer)"
+  vpc_id      = aws_vpc.ep_vpc.id
+
+  ingress {
+    description = "Allow all traffic through HTTPS"
+    from_port   = "443"
+    to_port     = "443"
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   ingress {
     description = "Allow all traffic through HTTP"
     from_port   = "80"
@@ -96,11 +146,58 @@ resource "aws_security_group" "test_web_sg" {
   }
 
   ingress {
-    description = "Allow SSH from my computer"
+    description = "Allow SSH from my bastion host"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["${var.my_ip}/32"]
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+resource "aws_security_group" "ep_app_sg" {
+  name        = "ep_app_sg"
+  description = "Security group for app server (application layer)"
+  vpc_id      = aws_vpc.ep_vpc.id
+
+  ingress {
+    description = "Allow all traffic through HTTPS"
+    from_port   = "443"
+    to_port     = "443"
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow all traffic through HTTP"
+    from_port   = "80"
+    to_port     = "80"
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+    ingress {
+    description = "Allow all traffic through HTTP"
+    from_port   = "8000"
+    to_port     = "8000"
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow SSH from my bastion host"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -111,129 +208,148 @@ resource "aws_security_group" "test_web_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
   tags = {
-    Name = "test_web_sg"
+    Name = "ep_app_sg"
   }
 }
 
-resource "aws_security_group" "test_db_sg" {
-  name        = "test_db_sg"
-  description = "Security group for test databases"
-  vpc_id      = aws_vpc.test-vpc.id
+resource "aws_security_group" "ep_bastion_sg" {
+  name        = "ep_bastion_sg"
+  description = "Security group for test web servers"
+  vpc_id      = aws_vpc.ep_vpc.id
+
   ingress {
-    description     = "Allow MySQL traffic from only the web sg"
-    from_port       = "3306"
-    to_port         = "3306"
-    protocol        = "tcp"
-    security_groups = [aws_security_group.test_web_sg.id]
+    description = "Allow all traffic through HTTP"
+    from_port   = "443"
+    to_port     = "443"
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow all traffic through HTTP"
+    from_port   = "80"
+    to_port     = "80"
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow SSH from my local computer"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
   tags = {
-    Name = "test_db_sg"
+    Name = "ep_bastion_sg"
   }
 }
-resource "aws_db_subnet_group" "test_db_subnet_group" {
-  name        = "test_db_subnet_group"
-  description = "DB subnet group for test"
-  subnet_ids  = [for subnet in aws_subnet.test_private_subnet : subnet.id]
+
+resource "aws_security_group" "ep_db_sg" {
+  name        = "ep_db_sg"
+  description = "Security group for ep postgres database"
+  vpc_id      = aws_vpc.ep_vpc.id
+  ingress {
+    description     = "Allow Postgres traffic only from the application sg"
+    from_port       = "5432"
+    to_port         = "5432"
+    protocol        = "tcp"
+    security_groups = [aws_security_group.ep_app_sg.id]
+  }
+  tags = {
+    Name = "ep_db_sg"
+  }
 }
 
-resource "aws_db_instance" "test_database" {
+resource "aws_db_subnet_group" "ep_db_subnet_group" {
+  name        = "ep_db_subnet_group"
+  description = "DB subnet group for test"
+  subnet_ids  = [for subnet in aws_subnet.ep_private_db_subnet : subnet.id]
+}
+
+resource "aws_db_instance" "ep_database_dev" {
   allocated_storage      = var.settings.database.allocated_storage
   engine                 = var.settings.database.engine
   instance_class         = var.settings.database.instance_class
   db_name                = var.settings.database.db_name
   username               = var.db_username
   password               = var.db_password
-  db_subnet_group_name   = aws_db_subnet_group.test_db_subnet_group.id
-  vpc_security_group_ids = [aws_security_group.test_db_sg.id]
+  db_subnet_group_name   = aws_db_subnet_group.ep_db_subnet_group.id
+  vpc_security_group_ids = [aws_security_group.ep_db_sg.id]
   skip_final_snapshot    = var.settings.database.skip_final_snapshot
 }
 
-resource "aws_key_pair" "test_kp" {
-  key_name   = "test_kp"
-  public_key = file("test_kp.pub")
-}
-
-resource "aws_efs_file_system" "test_efs" {
-  creation_token = "test-efs"
-}
-
-resource "aws_efs_mount_target" "test_efs_mount_target" {
-  file_system_id = aws_efs_file_system.test_efs.id
-  count          = length(aws_subnet.test_public_subnet)
-  subnet_id      = aws_subnet.test_public_subnet[count.index].id
-}
-
-resource "aws_instance" "test_web" {
+resource "aws_instance" "ep_app_dev" {
   count                  = var.settings.web_app.count
-  ami                    = data.aws_ami.ubuntu.id
+  ami                    = data.aws_ami.rhel_9-3.id
   instance_type          = var.settings.web_app.instance_type
-  subnet_id              = aws_subnet.test_public_subnet[count.index].id
-  key_name               = aws_key_pair.test_kp.key_name
-  vpc_security_group_ids = [aws_security_group.test_web_sg.id]
-  user_data = file("user_data_script.sh")
+  subnet_id              = aws_subnet.ep_private_app_subnet[count.index].id
+  key_name               = "web-kp"
+  vpc_security_group_ids = [aws_security_group.ep_web_sg.id]
+  user_data = file("app_config.sh")
 
   tags = {
-    Name = "test_web_${count.index}"
+    Name = "ep-app-dev-${count.index+1}"
   }
 }
 
-resource "aws_eip" "test_web_eip" {
-  count    = var.settings.web_app.count
-  instance = aws_instance.test_web[count.index].id
+resource "aws_instance" "ep_web" {
+  count                  = var.settings.web_app.count
+  ami                    = data.aws_ami.rhel_9-3.id
+  instance_type          = var.settings.web_app.instance_type
+  subnet_id              = aws_subnet.ep_private_web_subnet[count.index].id
+  key_name               = "web-kp"
+  vpc_security_group_ids = [aws_security_group.ep_web_sg.id]
+  user_data = file("web_config.sh")
+
+  tags = {
+    Name = "ep-web-dev-${count.index+1}"
+  }
+}
+
+resource "aws_instance" "ep_bastion" {
+  count                  = var.settings.bastion.count
+  ami                    = data.aws_ami.rhel_9-3.id
+  instance_type          = var.settings.bastion.instance_type
+  subnet_id              = aws_subnet.ep_public_subnet[count.index].id
+  key_name               = "web-kp"
+  vpc_security_group_ids = [aws_security_group.ep_bastion_sg.id]
+  user_data = file("bastion_config.sh")
+
+  tags = {
+    Name = "ep-bastion-dev-${count.index+1}"
+  }
+}
+
+
+resource "aws_eip" "ep_bastion_eip" {
+  count    = var.settings.bastion.count
+  instance = aws_instance.ep_bastion[count.index].id
   vpc      = true
   tags = {
-    Name = "test_web_eip_${count.index}"
+    Name = "ep-web-eip-${count.index+1}"
   }
 }
 
-resource "aws_lb" "test_lb" {
-  name               = "test-lb"
-  internal           = false
-  load_balancer_type = "application"
-  security_groups    = [aws_security_group.test_web_sg.id]
-  subnets            = aws_subnet.test_public_subnet[*].id
-
-  enable_deletion_protection = false
+resource "aws_eip" "ep_nat_eip" {
+  vpc = true
 }
 
-resource "aws_lb_target_group" "test_target_group" {
-  name     = "test-target-group"
-  port     = 80
-  protocol = "HTTP"
-  vpc_id   = aws_vpc.test-vpc.id
+resource "aws_nat_gateway" "ep_nat_gateway" {
+  allocation_id = aws_eip.ep_nat_eip.id
+  subnet_id     = aws_subnet.ep_public_subnet[0].id
 }
 
-resource "aws_lb_listener" "test_lb_listener" {
-  load_balancer_arn = aws_lb.test_lb.arn
-  port              = 80
-  protocol          = "HTTP"
-
- default_action {
-    type = "fixed-response"
-
-    fixed_response {
-      content_type = "text/plain"
-      status_code  = "200"
-      message_body = "Hello, world!"
-    }
-  }
-}
-
-resource "aws_lb_target_group_attachment" "test_lb_attachment" {
-  target_group_arn = aws_lb_target_group.test_target_group.arn
-  count            = length(aws_instance.test_web)
-  target_id        = aws_instance.test_web[count.index].id
-  port             = 80
-}
-
-resource "aws_cloudwatch_metric_alarm" "requests_alarm" {
-  alarm_name          = "HighRequestCountAlarm"
-  comparison_operator = "GreaterThanOrEqualToThreshold"
-  evaluation_periods  = "2"
-  metric_name         = "RequestCount"
-  namespace           = "AWS/ApplicationELB"
-  period              = "60"
-  statistic           = "Sum"
-  threshold           = "1000"
-  alarm_description  = "Alarm when the total number of requests exceeds 1000"
+resource "aws_route" "ep_private_route" {
+  route_table_id         = aws_route_table.ep_private_rt.id
+  destination_cidr_block = "0.0.0.0/0"
+  nat_gateway_id         = aws_nat_gateway.ep_nat_gateway.id
 }
