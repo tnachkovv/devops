@@ -221,11 +221,6 @@ data "aws_ami" "rhel_9-3" {
 //    Name = "ep_db_sg"
 //  }
 //}
-resource "aws_db_subnet_group" "ep_db_subnet_group1" {
-  name        = "ep_db_subnet_group"
-  description = "DB subnet group for test"
-  subnet_ids  = ["subnet-092fe846f2a74974f","subnet-0f7f34a189e0b7b74"]
-}
 
 resource "aws_db_instance" "ep_database_qa" {
   allocated_storage      = var.settings.database.allocated_storage
@@ -234,7 +229,7 @@ resource "aws_db_instance" "ep_database_qa" {
   db_name                = var.settings.database.db_name
   username               = var.db_username
   password               = var.db_password
-  db_subnet_group_name   = aws_db_subnet_group.ep_db_subnet_group1.id
+  db_subnet_group_name   = "ep_db_subnet_group"
   vpc_security_group_ids = ["sg-07fef310972a5f24c"]
   skip_final_snapshot    = var.settings.database.skip_final_snapshot
 }
@@ -330,9 +325,16 @@ resource "aws_launch_template" "ep_web_template_qa" {
     resource_type = "instance"
 
     tags = {
-      Name = "ep-web-template-qa"
+      Name = "ep_web_template_qa"
     }
   }
+  instance_type = "t2.micro"
+
+  user_data = <<-EOF
+              #!/bin/bash
+              echo "User data script executed." >> /var/log/user_data.log
+              # Your additional initialization steps here
+              EOF
 }
 
 # Define an Auto Scaling Group for your web instances
@@ -382,11 +384,17 @@ resource "aws_launch_template" "ep_app_template_qa" {
     resource_type = "instance"
 
     tags = {
-      Name = "ep-app-template-qa"
+      Name = "ep_app_template_qa"
     }
   }
-}
+    instance_type = "t2.micro"
 
+    user_data = <<-EOF
+              #!/bin/bash
+              echo "User data script executed." >> /var/log/user_data.log
+              # Your additional initialization steps here
+              EOF
+}
 # Define an Auto Scaling Group for app instances
 resource "aws_autoscaling_group" "ep_autoscaling_group_app_qa" {
   desired_capacity     = 2
@@ -409,11 +417,6 @@ resource "aws_autoscaling_group" "ep_autoscaling_group_app_qa" {
   health_check_grace_period  = 300
   force_delete               = true
 }
-
-
-
-
-
 
 
 ####LOAD BALANCING#####
@@ -460,7 +463,7 @@ resource "aws_lb_target_group" "web_target_group_qa" {
 
 # Define an Elastic Load Balancer for your web servers
 resource "aws_lb" "web_lb" {
-  name               = "ext-web-lb-qa"
+  name               = "ext_web_lb_qa"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.ext_lb_sg_qa.id]
@@ -474,7 +477,7 @@ resource "aws_lb" "web_lb" {
   enable_http2 = true
 
   tags = {
-    Name = "ext-web-lb-qa"
+    Name = "ext_web_lb_qa"
   }
 }
 
@@ -530,7 +533,7 @@ resource "aws_lb_target_group_attachment" "ep_web_lb_attachment_qa" {
 
 # Define an Elastic Load Balancer for your application servers
 resource "aws_lb" "app_lb" {
-  name               = "int-app-lb-qa"
+  name               = "int_app_lb_qa"
   internal           = true
   load_balancer_type = "application"
   security_groups    = [aws_security_group.int_lb_sg_qa.id]
@@ -539,7 +542,7 @@ resource "aws_lb" "app_lb" {
   subnets = ["subnet-092fe846f2a74974f", "subnet-0f7f34a189e0b7b74"] # These the private subnets
   enable_http2 = true
   tags = {
-    Name = "int-app-lb-qa"
+    Name = "int_app_lb_qa"
   }
 }
 
@@ -580,14 +583,14 @@ resource "aws_lb_target_group_attachment" "ep_app_lb_attachment_qa" {
   port             = 8000
 }
 
-//resource "aws_cloudwatch_metric_alarm" "requests_alarm" {
-//  alarm_name          = "HighRequestCountAlarm"
-//  comparison_operator = "GreaterThanOrEqualToThreshold"
-//  evaluation_periods  = "2"
-//  metric_name         = "RequestCount"
-//  namespace           = "AWS/ApplicationELB"
-//  period              = "60"
-//  statistic           = "Sum"
-//  threshold           = "1000"
-//  alarm_description  = "Alarm when the total number of requests exceeds 1000"
-//}
+resource "aws_cloudwatch_metric_alarm" "requests_alarm" {
+  alarm_name          = "HighRequestCountAlarm"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "RequestCount"
+  namespace           = "AWS/ApplicationELB"
+  period              = "60"
+  statistic           = "Sum"
+  threshold           = "1000"
+  alarm_description  = "Alarm when the total number of requests exceeds 1000"
+}
